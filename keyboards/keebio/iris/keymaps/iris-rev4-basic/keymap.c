@@ -5,6 +5,9 @@
 #define _RAISE 2
 #define _ADJUST 3
 
+static uint16_t idle_timer;
+static uint8_t min_counter;
+
 enum custom_keycodes {
   QWERTY = SAFE_RANGE,
   LOWER,
@@ -35,7 +38,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   //├────────┼────────┼────────┼────────┼────────┼────────┤                          ├────────┼────────┼────────┼────────┼────────┼────────┤
      _______,  _______, KC_EQL, KC_MINS, KC_UNDS, KC_PLUS,                            KC_LEFT, KC_DOWN, KC_UP,   KC_RGHT, _______, _______,
   //├────────┼────────┼────────┼────────┼────────┼────────┼────────┐        ┌────────┼────────┼────────┼────────┼────────┼────────┼────────┤
-     KC_LCTL, KC_LALT, _______, _______, _______, _______, _______,          _______, _______, _______, _______, _______, _______, TO(_RAISE),
+     KC_LCTL, KC_LALT, _______, _______, _______, _______, _______,          TO(_RAISE), _______, _______, _______, _______, _______, _______,
   //└────────┴────────┴────────┴───┬────┴───┬────┴───┬────┴───┬────┘        └───┬────┴───┬────┴───┬────┴───┬────┴────────┴────────┴────────┘
                                     _______, _______, _______,                   _______,  _______, _______
                                 // └────────┴────────┴────────┘                 └────────┴────────┴────────┘
@@ -47,9 +50,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   //├────────┼────────┼────────┼────────┼────────┼────────┤                          ├────────┼────────┼────────┼────────┼────────┼────────┤
      RGB_TOG, KC_EXLM, KC_AT,   KC_HASH, KC_DLR,  KC_PERC,                            KC_CIRC, KC_AMPR, KC_ASTR, KC_LPRN, KC_RPRN, _______,
   //├────────┼────────┼────────┼────────┼────────┼────────┤                          ├────────┼────────┼────────┼────────┼────────┼────────┤
-     RGB_MOD, KC_MPRV, KC_MNXT, KC_VOLU, KC_PGUP, KC_UNDS,                            KC_EQL,  KC_HOME, RGB_HUI, RGB_SAI, RGB_VAI, _______,
+     RGB_MOD, KC_MPRV, KC_MNXT, KC_VOLU, KC_PGUP, KC_UNDS,                            KC_EQL,  KC_HOME, KC_BRMU, RGB_SAI, RGB_VAI, _______,
   //├────────┼────────┼────────┼────────┼────────┼────────┼────────┐        ┌────────┼────────┼────────┼────────┼────────┼────────┼────────┤
-     KC_MUTE, KC_MSTP, KC_MPLY, KC_VOLD, KC_PGDN, KC_MINS, KC_LPRN,          _______, KC_PLUS, KC_END,  RGB_HUD, RGB_SAD, RGB_VAD, TO(_QWERTY),
+     KC_MUTE, KC_MSTP, KC_MPLY, KC_VOLD, KC_PGDN, KC_MINS, KC_LPRN,          TO(_QWERTY), KC_PLUS, KC_END,  KC_BRMD, RGB_SAD, RGB_VAD, _______,
   //└────────┴────────┴────────┴───┬────┴───┬────┴───┬────┴───┬────┘        └───┬────┴───┬────┴───┬────┴───┬────┴────────┴────────┴────────┘
                                     _______, _______, _______,                   _______, _______, _______
                                 // └────────┴────────┴────────┘                 └────────┴────────┴────────┘
@@ -71,7 +74,22 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 };
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+  idle_timer = timer_read();
+  if (!rgblight_is_enabled()) {
+    rgblight_enable();
+  }
+
   switch (keycode) {
+    case KC_CAPS:
+      if (record->event.pressed) {
+        if (rgblight_get_mode() == RGBLIGHT_MODE_BREATHING + 2) {
+          rgblight_mode_noeeprom(RGBLIGHT_MODE_STATIC_LIGHT);
+        } else {
+          rgblight_mode_noeeprom(RGBLIGHT_MODE_BREATHING + 2);
+        }
+      }
+      return true;
+      break;
     case QWERTY:
       if (record->event.pressed) {
         set_single_persistent_default_layer(_QWERTY);
@@ -110,6 +128,20 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   return true;
 }
 
+void matrix_scan_user() {
+  if (rgblight_is_enabled()) {
+    if (timer_elapsed(idle_timer) > 60000) {
+      min_counter++;
+      idle_timer = timer_read();
+    }
+
+    if (min_counter >= 5) {
+      rgblight_disable();
+      min_counter = 0;
+    }
+  }
+}
+
 void encoder_update_user(uint8_t index, bool clockwise) {
     if (index == 0) {
         if (clockwise) {
@@ -130,6 +162,7 @@ void encoder_update_user(uint8_t index, bool clockwise) {
 void keyboard_post_init_user(void) {
   rgblight_enable_noeeprom(); // enables Rgb, without saving settings
   rgblight_sethsv_noeeprom (0x51,  0xB1, 0xC8); // green
+  rgblight_mode_noeeprom(RGBLIGHT_MODE_STATIC_LIGHT);
 }
 
 layer_state_t layer_state_set_user(layer_state_t state) {
